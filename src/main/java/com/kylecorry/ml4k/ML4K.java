@@ -9,29 +9,56 @@ import java.util.Scanner;
 
 public class ML4K {
 
+    /**
+     * The URL endpoint for ML4K, where the %s is the API key.
+     */
     private static final String ENDPOINT_URL = "https://machinelearningforkids.co.uk/api/scratch/%s/classify";
 
+    /**
+     * The API key for ML4K.
+     */
     private String key;
 
+    /**
+     * The listeners to be called during classification.
+     */
     private OnClassificationListener classificationListener;
     private OnClassificationErrorListener errorListener;
 
+    /**
+     * Create an instance of ML4K.
+     *
+     * @param key Your API key for ML4K.
+     * @param classificationListener  The listener which will be notified when a classification completes.
+     * @param errorListener The listener which will be notified when a classification fails.
+     */
     public ML4K(String key, OnClassificationListener classificationListener, OnClassificationErrorListener errorListener) {
         this.key = key;
         this.classificationListener = classificationListener;
         this.errorListener = errorListener;
     }
 
+    /**
+     * Get the API key.
+     * @return The API key.
+     */
     public String getKey() {
         return key;
     }
 
+    /**
+     * Set the API key.
+     * @param key The API key.
+     */
     public void setKey(String key) {
         this.key = key;
     }
 
     // Methods
-
+    /**
+     * Classify an image using ML4K.
+     * @param path The path to the image.
+     */
     public void classifyImage(final String path){
             try {
                 // Get the data
@@ -81,10 +108,14 @@ public class ML4K {
             }
     }
 
-    public void classifyText(final String data){
+    /**
+     * Classify text using ML4K.
+     * @param text The text to classify.
+     */
+    public void classifyText(final String text){
             try {
                 // Get the data
-                String urlStr = getURL() + "?data=" + URLEncoder.encode(data, "UTF-8");
+                String urlStr = getURL() + "?data=" + URLEncoder.encode(text, "UTF-8");
 
                 // Setup the request
                 URL url = new URL(urlStr);
@@ -100,48 +131,64 @@ public class ML4K {
 
                     // Parse JSON
                     try {
-                        Classification classification = Classification.fromJson(data, json);
+                        Classification classification = Classification.fromJson(text, json);
                         gotClassification(classification);
                     } catch (JsonParseException e){
-                        gotError(data, "Bad data from server.");
+                        gotError(text, "Bad data from server.");
                     }
                 } else {
-                    gotError(data, "Bad response from server: " + conn.getResponseCode());
+                    gotError(text, "Bad response from server: " + conn.getResponseCode());
                     conn.disconnect();
                 }
 
             } catch (UnsupportedEncodingException e) {
-                gotError(data, "Could not encode text");
+                gotError(text, "Could not encode text");
             } catch (ProtocolException e) {
                 e.printStackTrace();
             } catch (MalformedURLException e) {
-                gotError(data, "Could not generate URL");
+                gotError(text, "Could not generate URL");
             } catch (IOException e) {
-                gotError(data, "No Internet connection.");
+                gotError(text, "No Internet connection.");
             }
     }
 
-    public void asyncClassifyText(final String data){
-        runInBackground(() -> classifyText(data));
+    /**
+     * Classify text in the background.
+     * @param text The text to classify.
+     */
+    public void asyncClassifyText(final String text){
+        runInBackground(() -> classifyText(text));
     }
 
+    /**
+     * Classify an image in the background.
+     * @param path The path to the image.
+     */
     public void asyncClassifyImage(final String path){
         runInBackground(() -> classifyImage(path));
     }
 
 
     // Events
+    /**
+     * Called when an error is received.
+     * @param data The data to be classified.
+     * @param error The error received.
+     */
     private void gotError(String data, String error){
         errorListener.gotError(data, error);
     }
 
+    /**
+     * Called when a classification completes.
+     * @param classification The classification results.
+     */
     private void gotClassification(Classification classification) {
         classificationListener.gotClassification(classification);
     }
 
 
     // Helpers
-
     /**
      * Read an input stream to a String.
      * @param is The input stream.
@@ -188,7 +235,10 @@ public class ML4K {
         return "";
     }
 
-
+    /**
+     * Run in the background.
+     * @param runnable The code to run in the background.
+     */
     private void runInBackground(Runnable runnable){
         new Thread(runnable).start();
     }
