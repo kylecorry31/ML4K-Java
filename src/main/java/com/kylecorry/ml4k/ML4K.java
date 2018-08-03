@@ -11,6 +11,11 @@ import java.util.Scanner;
 public class ML4K {
 
     /**
+     * The version number of the API.
+     */
+    public static final String VERSION = "0.6";
+
+    /**
      * The URL endpoint for ML4K, where the %s is the API key.
      */
     private static final String ENDPOINT_URL = "https://machinelearningforkids.co.uk/api/scratch/%s/classify";
