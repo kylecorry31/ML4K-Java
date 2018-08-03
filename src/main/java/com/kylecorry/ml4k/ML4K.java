@@ -4,6 +4,7 @@ import com.google.gson.*;
 
 import java.io.*;
 import java.net.*;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Scanner;
 
@@ -153,6 +154,51 @@ public class ML4K {
     }
 
     /**
+     * Classify numbers using ML4K.
+     * @param numbers The numbers to classify.
+     */
+    public void classifyNumbers(final double... numbers){
+        final String numberStr = Arrays.toString(numbers);
+        try {
+            // Get the data
+            String urlStr = getURL() + "?" + urlEncodeList("data", numbers);
+
+            // Setup the request
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:61.0) Gecko/20100101 Firefox/61.0");
+
+            // Parse
+            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK){
+                final String json = read(conn.getInputStream());
+                conn.disconnect();
+
+                // Parse JSON
+                try {
+                    Classification classification = Classification.fromJson(numberStr, json);
+                    gotClassification(classification);
+                } catch (JsonParseException e){
+                    gotError(numberStr, "Bad data from server.");
+                }
+            } else {
+                gotError(numberStr, "Bad response from server: " + conn.getResponseCode());
+                conn.disconnect();
+            }
+
+        } catch (UnsupportedEncodingException e) {
+            gotError(numberStr, "Could not encode text");
+        } catch (ProtocolException e) {
+            e.printStackTrace();
+        } catch (MalformedURLException e) {
+            gotError(numberStr, "Could not generate URL");
+        } catch (IOException e) {
+            gotError(numberStr, "No Internet connection.");
+        }
+    }
+
+    /**
      * Classify text in the background.
      * @param text The text to classify.
      */
@@ -241,6 +287,30 @@ public class ML4K {
      */
     private void runInBackground(Runnable runnable){
         new Thread(runnable).start();
+    }
+
+    /**
+     * Encode a list for a URL get request.
+     * @param paramName The name of the parameter.
+     * @param list The list to encode.
+     * @return The encoded list.
+     */
+    private String urlEncodeList(String paramName, double[] list) throws UnsupportedEncodingException {
+        StringBuilder sb = new StringBuilder();
+        if (list == null || list.length == 0){
+            return "";
+        }
+
+        for (int i = 0; i < list.length; i++) {
+            sb.append(paramName);
+            sb.append('=');
+            sb.append(list[i]);
+            if (i != list.length - 1){
+                sb.append('&');
+            }
+        }
+
+        return sb.toString();
     }
 
 }
