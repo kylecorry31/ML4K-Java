@@ -1,12 +1,13 @@
 package com.kylecorry.ml4k;
 
 import com.google.gson.*;
+import com.sun.xml.internal.messaging.saaj.packaging.mime.internet.MimeUtility;
 
 import java.io.*;
 import java.net.*;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Scanner;
+import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.util.*;
 
 public class ML4K {
 
@@ -63,16 +64,16 @@ public class ML4K {
         try {
             // Get the data
             final String imageData = getImageData(path);
-            String dataStr = "{\"data\": " + "\"" + URLEncoder.encode(imageData, "UTF-8") + "\"}";
+            JsonObject obj = new JsonObject();
+            obj.addProperty("data", imageData);
+            String dataStr = obj.toString();
 
             // Setup the request
             URL url = new URL(getURL());
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             conn.setFixedLengthStreamingMode(dataStr.length());
             conn.setRequestMethod("POST");
-            conn.setRequestProperty("Accept", "*/*");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:61.0) Gecko/20100101 Firefox/61.0");
-            conn.setRequestProperty("Connection", "keep-alive");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
             conn.setRequestProperty("Content-Type", "application/json");
 
             // Send image data
@@ -95,6 +96,7 @@ public class ML4K {
                 }
             } else {
                 int response = conn.getResponseCode();
+                System.out.println(read(conn.getErrorStream()));
                 conn.disconnect();
                 throw new ClassificationException("Bad response from server: " + response);
             }
@@ -238,15 +240,14 @@ public class ML4K {
      * @param path The path to the image.
      * @return The data of the image as a base 64 string.
      */
-    private String getImageData(final String path) throws FileNotFoundException {
-        Scanner scanner = new Scanner(new FileReader(path));
-        StringBuilder sb = new StringBuilder();
-        while (scanner.hasNext()) {
-            sb.append(scanner.next());
-        }
-        scanner.close();
-        byte[] encodedBytes = Base64.getEncoder().encode(sb.toString().getBytes());
-        return new String(encodedBytes);
+    private String getImageData(final String path) throws IOException {
+       byte[] byteArray = Files.readAllBytes(new File(path).toPath());
+        return base64Encoding(byteArray);
+    }
+
+
+    private String base64Encoding(byte[] s) {
+        return Base64.getEncoder().encodeToString(s);
     }
 
     /**
