@@ -1,89 +1,43 @@
 package com.kylecorry.ml4k;
 
-import com.google.gson.*;
-
-import java.util.Objects;
-
-public class Classification {
-    private String data;
+class Classification {
     private String classification;
     private double confidence;
 
-    /**
-     * Create a classification.
-     *
-     * @param data           The data that was classified.
-     * @param classification The predicted class.
-     * @param confidence     The confidence of the prediction (out of 100).
-     */
-    private Classification(String data, String classification, double confidence) {
-        this.data = data;
+    private Classification(String classification, double confidence) {
         this.classification = classification;
         this.confidence = confidence;
     }
 
     /**
-     * Create a classification from JSON.
-     *
-     * @param data The data that was classified.
-     * @param json The JSON response from ML4K.
-     * @return The classification.
-     * @throws JsonParseException Thrown when the server returns malformed JSON.
+     * Loads a classification from JSON
+     * @param json the JSON
+     * @return the classification
+     * @throws ML4KException if the JSON is invalid
      */
-    static Classification fromJson(String data, String json) throws JsonParseException {
-        JsonElement jsonElement = new JsonParser().parse(json);
-        JsonArray jsonArray = jsonElement.getAsJsonArray();
-        JsonObject value = jsonArray.get(0).getAsJsonObject();
+    public static Classification fromJson(String json) throws ML4KException {
 
-        final String className = value.get("class_name").getAsString();
-        final double confidence = value.get("confidence").getAsDouble();
-        return new Classification(data, className, confidence);
+        if (json == null){
+          throw new ML4KException("JSON is not valid: " + json);
+        }
+
+        String className = JSONUtils.readStringProperty(json, "class_name");
+        double confidence = JSONUtils.readRealProperty(json, "confidence");
+
+        return new Classification(className, confidence);
     }
 
     /**
-     * Get the data that was classified.
-     *
-     * @return The data classified.
-     */
-    public String getData() {
-        return data;
-    }
-
-    /**
-     * Get the classification of the data.
-     *
-     * @return The predicted classification.
+     * @return the classification
      */
     public String getClassification() {
         return classification;
     }
 
     /**
-     * Get the confidence of the prediction.
-     *
-     * @return The confidence of the prediction [0-100].
+     * @return the confidence
      */
     public double getConfidence() {
         return confidence;
-    }
-
-    @Override
-    public String toString() {
-        return String.format("'%s': classified as '%s' with %f%% confidence.", data, classification, confidence);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Classification that = (Classification) o;
-        return Double.compare(that.confidence, confidence) == 0 &&
-                Objects.equals(data, that.data) &&
-                Objects.equals(classification, that.classification);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(data, classification, confidence);
     }
 }

@@ -1,278 +1,278 @@
 package com.kylecorry.ml4k;
 
-import com.google.gson.*;
-import com.sun.xml.internal.messaging.saaj.packaging.mime.internet.MimeUtility;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.List;
+import java.util.regex.Pattern;
 
-import java.io.*;
-import java.net.*;
-import java.nio.ByteOrder;
-import java.nio.file.Files;
-import java.util.*;
-
+/**
+ * The ML4K API
+ */
 public class ML4K {
 
-    /**
-     * The version number of the API.
-     */
-    public static final String VERSION = "0.6";
+    private static final String BASE_URL = "https://machinelearningforkids.co.uk/api/scratch/%s";
+    private static final String CLASSIFY_ENDPOINT = "/classify";
+    private static final String MODELS_ENDPOINT = "/model";
+    private static final String TRAIN_ENDPOINT = "/train";
+    private static final String STATUS_ENDPOINT = "/status";
+
+    private HttpStrategy http;
+
+    private final Pattern apiKeyPattern = Pattern.compile(
+        "[0-9a-f]{8}-[0-9a-f]{4}-[1][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}" +
+        "[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}"
+    );
+
+    private String apiKey;
 
     /**
-     * The URL endpoint for ML4K, where the %s is the API key.
+     * Default constructor
+     * @param apiKey the API key
+     * @throws ML4KException if the API key is invalid
      */
-    private static final String ENDPOINT_URL = "https://machinelearningforkids.co.uk/api/scratch/%s/classify";
-
-    /**
-     * The API key for ML4K.
-     */
-    private String key;
-
-    /**
-     * Create an instance of ML4K.
-     *
-     * @param key Your API key for ML4K.
-     */
-    public ML4K(String key) {
-        this.key = key;
+    public ML4K(String apiKey) throws ML4KException {
+        setAPIKey(apiKey);
+        http = new HttpImpl();
     }
 
     /**
-     * Get the API key.
-     *
-     * @return The API key.
+     * @param apiKey the ML4K API key
+     * @throws ML4KException if the API key is invalid
      */
-    public String getKey() {
-        return key;
+    public void setAPIKey(String apiKey) throws ML4KException {
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new ML4KException("API key not set");
+        }
+        if (!apiKeyPattern.matcher(apiKey).matches()) {
+            throw new ML4KException("API key isn't a Machine Learning for Kids key");
+        }
+
+        this.apiKey = apiKey;
     }
 
-    /**
-     * Set the API key.
-     *
-     * @param key The API key.
-     */
-    public void setKey(String key) {
-        this.key = key;
-    }
-
-    // Methods
 
     /**
-     * Classify an image using ML4K.
-     *
-     * @param path The path to the image.
+     * Classify an image
+     * @param image the image
+     * @return the classification of the image
+     * @throws ML4KException when an error occurs
      */
-    public Classification classifyImage(final String path) {
+    public Classification classify(File image) throws ML4KException {
         try {
-            // Get the data
-            final String imageData = getImageData(path);
-            JsonObject obj = new JsonObject();
-            obj.addProperty("data", imageData);
-            String dataStr = obj.toString();
+            String dataStr = "{\"data\": " + "\"" + ImageEncoder.encode(image) + "\"}";
+            URL url = new URL(getBaseURL() + CLASSIFY_ENDPOINT);
+            APIResponse res = http.postJSON(url, dataStr);
 
-            // Setup the request
-            URL url = new URL(getURL());
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setFixedLengthStreamingMode(dataStr.length());
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-            conn.setRequestProperty("Content-Type", "application/json");
-
-            // Send image data
-            conn.setDoOutput(true);
-            DataOutputStream os = new DataOutputStream(conn.getOutputStream());
-            os.writeBytes(dataStr);
-            os.flush();
-            os.close();
-
-            // Parse
-            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                final String json = read(conn.getInputStream());
-                conn.disconnect();
-
-                // Parse JSON
-                try {
-                    return Classification.fromJson(path, json);
-                } catch (JsonParseException e) {
-                    throw new ClassificationException("Bad data from server " + json);
-                }
+            if (res.isOK()) {
+                return Classification.fromJson(res.getBody());
             } else {
-                int response = conn.getResponseCode();
-                System.out.println(read(conn.getErrorStream()));
-                conn.disconnect();
-                throw new ClassificationException("Bad response from server: " + response);
+                APIErrorResponse response = APIErrorResponse.fromJson(res.getBody());
+                throw new ML4KException(response == null ? "Bad response from server: " + res.getResponseCode() : response.getError());
             }
-
-        } catch (UnsupportedEncodingException e) {
-            throw new ClassificationException("Could not encode image");
         } catch (MalformedURLException e) {
-            throw new ClassificationException("Could not generate URL");
+            throw new ML4KException("Could not generate URL");
         } catch (FileNotFoundException e) {
-            throw new ClassificationException("Could not open image file.");
+            throw new ML4KException("Could not load image file");
         } catch (IOException e) {
-            throw new ClassificationException("No Internet connection.");
+            throw new ML4KException("No Internet connection."); // TODO: standardize error messages
         }
     }
 
     /**
-     * Classify text using ML4K.
-     *
-     * @param text The text to classify.
+     * Classify some text
+     * @param text the text
+     * @return the classification of the text
+     * @throws ML4KException when an error occurs
      */
-    public Classification classifyText(final String text) {
+    public Classification classify(String text) throws ML4KException {
         try {
-            // Get the data
-            String urlStr = getURL() + "?data=" + URLEncoder.encode(text, "UTF-8");
-
-            // Setup the request
+            String urlStr = getBaseURL() + CLASSIFY_ENDPOINT + "?data=" + URLEncoder.encode(text, "UTF-8");
             URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:61.0) Gecko/20100101 Firefox/61.0");
-
-            // Parse
-            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                final String json = read(conn.getInputStream());
-                conn.disconnect();
-
-                // Parse JSON
-                try {
-                    return Classification.fromJson(text, json);
-                } catch (JsonParseException e) {
-                    throw new ClassificationException("Bad data from server.");
-                }
+            APIResponse res = http.getJSON(url);
+            
+            if (res.isOK()) {
+                return Classification.fromJson(res.getBody());
             } else {
-                int response = conn.getResponseCode();
-                conn.disconnect();
-                throw new ClassificationException("Bad response from server: " + response);
+                APIErrorResponse response = APIErrorResponse.fromJson(res.getBody());
+                throw new ML4KException(response == null ? "Bad response from server: " + res.getResponseCode() : response.getError());
+            }
+        } catch (UnsupportedEncodingException e) {
+            throw new ML4KException("Could not encode text");
+        } catch (MalformedURLException e) {
+            throw new ML4KException("Could not generate URL");
+        } catch (IOException e) {
+            throw new ML4KException("No Internet connection.");
+        }
+    }
+
+    /**
+     * Classify some numbers
+     * @param numbers the numbers
+     * @return the classification of the numbers
+     * @throws ML4KException when an error occurs
+     */
+    public Classification classify(List<Double> numbers) throws ML4KException {
+        try {
+            String urlStr = getBaseURL() + CLASSIFY_ENDPOINT + "?" + urlEncodeList("data", numbers);
+            URL url = new URL(urlStr);
+            APIResponse res = http.getJSON(url);
+            
+            if (res.isOK()) {
+                return Classification.fromJson(res.getBody());
+            } else {
+                APIErrorResponse response = APIErrorResponse.fromJson(res.getBody());
+                throw new ML4KException(response == null ? "Bad response from server: " + res.getResponseCode() : response.getError());
             }
 
         } catch (UnsupportedEncodingException e) {
-            throw new ClassificationException("Could not encode text");
-        } catch (ProtocolException e) {
-            e.printStackTrace();
+            throw new ML4KException("Could not encode numbers");
         } catch (MalformedURLException e) {
-            throw new ClassificationException("Could not generate URL");
+            throw new ML4KException("Could not generate URL");
         } catch (IOException e) {
-            throw new ClassificationException("No Internet connection.");
+            throw new ML4KException("No Internet connection.");
         }
-        return null;
     }
 
     /**
-     * Classify numbers using ML4K.
-     *
-     * @param numbers The numbers to classify.
+     * Adds text training data
+     * @param label the label of the data
+     * @param text the data
+     * @throws ML4KException if there is an error
      */
-    public Classification classifyNumbers(final double... numbers) {
-        final String numberStr = Arrays.toString(numbers);
+    public void addTrainingData(String label, String text) throws ML4KException {
         try {
-            // Get the data
-            String urlStr = getURL() + "?" + urlEncodeList("data", numbers);
-
-            // Setup the request
-            URL url = new URL(urlStr);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:61.0) Gecko/20100101 Firefox/61.0");
-
-            // Parse
-            if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                final String json = read(conn.getInputStream());
-                conn.disconnect();
-
-                // Parse JSON
-                try {
-                    return Classification.fromJson(numberStr, json);
-                } catch (JsonParseException e) {
-                    throw new ClassificationException("Bad data from server.");
-                }
+            URL url = new URL(getBaseURL() + TRAIN_ENDPOINT);
+            APIResponse res = http.postJSON(url, "{ \"data\": \"" + text + "\", \"label\": \"" + label + "\" }");
+            
+            if (res.isOK()) {
+                // Do nothing
             } else {
-                int response = conn.getResponseCode();
-                conn.disconnect();
-                throw new ClassificationException("Bad response from server: " + response);
+                APIErrorResponse response = APIErrorResponse.fromJson(res.getBody());
+                throw new ML4KException(response == null ? "Bad response from server: " + res.getResponseCode() : response.getError());
+            }
+        } catch (UnsupportedEncodingException e) {
+            throw new ML4KException("Could not encode numbers");
+        } catch (MalformedURLException e) {
+            throw new ML4KException("Could not generate URL");
+        } catch (IOException e) {
+            throw new ML4KException("No Internet connection.");
+        }
+    }
+
+    /**
+     * Adds image training data
+     * @param label the label of the data
+     * @param image the data
+     * @throws ML4KException if there is an error
+     */
+    public void addTrainingData(String label, File image) throws ML4KException {
+        try {
+            addTrainingData(label, ImageEncoder.encode(image));
+        } catch (IOException e) {
+            throw new ML4KException("Could not encode image");
+        }
+    }
+
+    /**
+     * Adds numbers training data
+     * @param label the label of the data
+     * @param numbers the data
+     * @throws ML4KException if there is an error
+     */
+    public void addTrainingData(String label, List<Double> numbers) throws ML4KException {
+        addTrainingData(label, numbers.toString()); // TODO: this might not be right
+    }
+
+
+    /**
+     * @return the model's status
+     * @throws ML4KException when any error occurs or if the status is undefined
+     */
+    public ModelStatus getModelStatus() throws ML4KException {
+        try{
+            URL url = new URL(getBaseURL() + STATUS_ENDPOINT);
+            APIResponse res = http.getJSON(url);
+         
+            if (res.isOK()) {
+                return ModelStatus.fromJson(res.getBody());
+            } else {
+                APIErrorResponse response = APIErrorResponse.fromJson(res.getBody());
+                throw new ML4KException(response == null ? "Bad response from server: " + res.getResponseCode() : response.getError());
+            }
+        } catch (MalformedURLException e) {
+            throw new ML4KException("Could not generate URL");
+        } catch (IOException e) {
+            throw new ML4KException("Unable to connect to ML4K servers");
+        }
+    }
+
+
+    /**
+     * Train the model
+     * @throws ML4KException when an error occurs
+     */
+    public void train() throws ML4KException {
+        try {
+            URL url = new URL(getBaseURL() + MODELS_ENDPOINT);
+            APIResponse res = http.postJSON(url, "");
+            
+            if (res.isOK()) {
+                // Do nothing
+            } else {
+                APIErrorResponse response = APIErrorResponse.fromJson(res.getBody());
+                throw new ML4KException(response == null ? "Bad response from server: " + res.getResponseCode() : response.getError());
             }
 
-        } catch (UnsupportedEncodingException e) {
-            throw new ClassificationException("Could not encode text");
-        } catch (ProtocolException e) {
-            e.printStackTrace();
         } catch (MalformedURLException e) {
-            throw new ClassificationException("Could not generate URL");
+            throw new ML4KException("Could not generate URL");
         } catch (IOException e) {
-            throw new ClassificationException("No Internet connection.");
+            throw new ML4KException("No Internet connection.");
         }
-        return null;
     }
 
-    // Helpers
 
     /**
-     * Read an input stream to a String.
-     *
-     * @param is The input stream.
-     * @return The data from the input stream as a String.
+     * @return the base URL of the ML4K API
      */
-    private String read(InputStream is) {
-        Scanner scanner = new Scanner(is);
-
-        StringBuilder sb = new StringBuilder();
-
-        while (scanner.hasNextLine()) {
-            sb.append(scanner.nextLine());
-        }
-
-        return sb.toString();
-    }
-
-    /**
-     * Get the ENDPOINT_URL for ML4K.
-     *
-     * @return The ENDPOINT_URL with the key for ML4K.
-     */
-    private String getURL() {
-        return String.format(ENDPOINT_URL, key);
-    }
-
-    /**
-     * Turn the data of an image into base 64.
-     *
-     * @param path The path to the image.
-     * @return The data of the image as a base 64 string.
-     */
-    private String getImageData(final String path) throws IOException {
-       byte[] byteArray = Files.readAllBytes(new File(path).toPath());
-        return base64Encoding(byteArray);
-    }
-
-
-    private String base64Encoding(byte[] s) {
-        return Base64.getEncoder().encodeToString(s);
+    private String getBaseURL(){
+        return String.format(BASE_URL, apiKey);
     }
 
     /**
      * Encode a list for a URL get request.
-     *
      * @param paramName The name of the parameter.
-     * @param list      The list to encode.
+     * @param list The list to encode.
      * @return The encoded list.
      */
-    private String urlEncodeList(String paramName, double[] list) {
+    private String urlEncodeList(String paramName, List<?> list) {
         StringBuilder sb = new StringBuilder();
-        if (list == null || list.length == 0) {
+        if (list == null || list.size() == 0){
             return "";
         }
 
-        for (int i = 0; i < list.length; i++) {
+        for (int i = 0; i < list.size(); i++) {
             sb.append(paramName);
             sb.append('=');
-            sb.append(list[i]);
-            if (i != list.length - 1) {
+            sb.append(list.get(i));
+            if (i != list.size() - 1){
                 sb.append('&');
             }
         }
 
         return sb.toString();
+    }
+
+
+    // For testing
+
+
+    void setHttpStrategy(HttpStrategy http){
+        this.http = http;
     }
 
 }
