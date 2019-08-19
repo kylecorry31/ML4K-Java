@@ -2,13 +2,15 @@ package com.kylecorry.ml4k;
 
 import org.junit.Test;
 
+import java.io.File;
+import java.net.URL;
 import java.util.Arrays;
 
 import static org.junit.Assert.*;
 
 public class ML4KTest {
 
-    // TODO: Verify that the data is being correctly sent
+    // TODO: Verify that the data is being correctly sent to correct URL
 
     private static final String FAKE_KEY = "00000000-0000-1000-0000-00000000000000000000-0000-4000-0000-000000000000";
 
@@ -51,12 +53,16 @@ public class ML4KTest {
 
     @Test
     public void canClassifyAnImage() throws Exception {
-//        MockHttpStrategy http = new MockHttpStrategy();
-//        ML4K ml4K = createValidML4K(http);
-//        http.setResponse(new APIResponse(200, "OK", "{\n\"class_name\": \"Test\",\n\"confidence\": 10.0\n}"));
-//        Classification classification = ml4K.classify(Arrays.asList(1.2, 3.4));
-//        assertEquals("Test", classification.getClassification());
-//        assertEquals(10.0, classification.getConfidence(), 0.0);
+        MockHttpStrategy http = new MockHttpStrategy();
+        ML4K ml4K = createValidML4K(http);
+        http.setResponse(new APIResponse(200, "OK", "{\n\"class_name\": \"pine\",\n\"confidence\": 100\n}"));
+
+        URL image = getClass().getResource("/pine.jpg");
+        File file = new File(image.getFile());
+
+        Classification classification = ml4K.classify(file);
+        assertEquals("pine", classification.getClassification());
+        assertEquals(100.0, classification.getConfidence(), 0.0);
     }
 
     @Test
@@ -77,10 +83,14 @@ public class ML4KTest {
 
     @Test
     public void canAddImageTrainingData() throws Exception {
-//        MockHttpStrategy http = new MockHttpStrategy();
-//        ML4K ml4K = createValidML4K(http);
-//        http.setResponse(new APIResponse(200, "OK", ""));
-//        ml4K.addTrainingData("Test", Arrays.asList(1.2, 3.4));
+        MockHttpStrategy http = new MockHttpStrategy();
+        ML4K ml4K = createValidML4K(http);
+        http.setResponse(new APIResponse(200, "OK", ""));
+
+        URL image = getClass().getResource("/pine.jpg");
+        File file = new File(image.getFile());
+
+        ml4K.addTrainingData("pine", file);
     }
 
     @Test
